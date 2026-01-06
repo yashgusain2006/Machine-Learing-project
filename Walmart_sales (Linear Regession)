@@ -1,0 +1,121 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+
+dataset = pd.read_excel(r'C:\Users\gusai\OneDrive\Documents\Walmart_Sales.xlsx')
+x=dataset.drop(columns=['Weekly_Sales','Date'])
+y=dataset['Weekly_Sales']
+
+from sklearn.model_selection import train_test_split
+x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=42)
+# outlier detection
+# boxplot
+# for x_train
+"""for feature in x_train.columns:
+    plt.boxplot(x_train[feature])
+    plt.title(f"Outlier 0f {feature}")"""
+# for y_train
+"""plt.boxplot(y_train)
+plt.title(f"Outlier weekly sales ")"""
+
+# distplot
+
+"""for feature in x_train.columns:
+    sns.distplot(x_train[feature],bins=30)
+    plt.title(f"{feature} distribution")
+    plt.xlabel(f"{feature}")
+    plt.ylabel("Frequency")"""
+
+
+
+# Outlier Treatment
+# Temperature
+percentile25 = x_train['Temperature'].quantile(0.25)
+percentile75 = x_train['Temperature'].quantile(0.75)
+IqR = percentile75 - percentile25
+upper = percentile75 + 1.5* IqR
+lower = percentile25 - 1.5* IqR
+
+# Unemployment
+per25= x_train['Unemployment'].quantile(0.25)
+per75= x_train['Unemployment'].quantile(0.75)
+IQR = per75 - per25
+upperbond = per75 + 1.5* IQR
+lowerbond = per25 - 1.5* IQR
+# capping
+x_train['Temperature']=x_train['Temperature'].clip(upper=upper,lower=lower)
+x_train['Unemployment']=x_train['Unemployment'].clip(upper=upperbond,lower=lowerbond)
+x_test['Temperature']=x_test['Temperature'].clip(upper=upper,lower=lower)
+x_test['Unemployment']=x_test['Unemployment'].clip(upper=upperbond,lower=lowerbond)
+
+# weekly sales
+y_train = np.log1p(y_train)
+
+# encoding store column
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+
+
+
+# feature engineering
+for df in [x_train, x_test]:
+    df['Temp_Fuel_Interaction'] = df['Temperature'] * df['Fuel_Price']
+    df['CPI_Unemployment'] = df['Unemployment'] * df['CPI']
+
+ct=ColumnTransformer(transformers=[('encoder',OneHotEncoder(handle_unknown='ignore'),['Store']),
+                                   ('scaler',StandardScaler(),['Temperature','Unemployment','Fuel_Price','CPI','Temp_Fuel_Interaction','CPI_Unemployment'])],remainder='passthrough')
+x_train_transformed=ct.fit_transform(x_train).toarray()
+x_test=ct.transform(x_test)
+# feature selection
+# forward selection
+from mlxtend.feature_selection import SequentialFeatureSelector
+from sklearn.linear_model import LinearRegression
+lr = LinearRegression()
+
+# Forward Selection
+sfs = SequentialFeatureSelector(lr,
+                                k_features='best',  # choose number of features or best subset automatically
+                                forward=True,       # forward selection
+                                floating=False,
+                                scoring='r2',       # metric to optimize
+                                cv=5)               # 5-fold CV
+
+sfs.fit(x_train_transformed, y_train)
+
+# Selected feature indices
+selected_features = sfs.k_feature_idx_
+
+
+# Subset training data
+x_train_selected = x_train_transformed[:, selected_features]
+
+# Fit model on selected features
+lr.fit(x_train_selected, y_train)
+
+# Subset test data
+x_test_selected = x_test[:, selected_features]
+
+# Predict
+y_pred_log = lr.predict(x_test_selected)
+y_pred = np.expm1(y_pred_log)
+
+import matplotlib.pyplot as plt
+
+plt.figure(figsize=(12,6))
+plt.plot(range(len(y_test)), y_test.values, label='Actual Weekly Sales', color='blue')
+plt.plot(range(len(y_test)), y_pred, label='Predicted Weekly Sales', color='red')
+plt.xlabel('Test Samples')
+plt.ylabel('Weekly Sales')
+plt.title('Actual vs Predicted Weekly Sales (Selected Features)')
+plt.legend()
+plt.show()
+
+
+
+
+
+
+
+
