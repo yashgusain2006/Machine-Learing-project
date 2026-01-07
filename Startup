@@ -1,0 +1,64 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.compose import ColumnTransformer
+
+dataset = pd.read_excel(r'C:\Users\gusai\OneDrive\Documents\50_Startups.xlsx')
+x=dataset.drop(columns=["Profit"])
+y=dataset['Profit']
+from sklearn.model_selection import train_test_split
+x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=42)
+# Outlier Detection
+# Distplot
+num_columns = ["R&D Spend","Administration","Marketing Spend"]
+"""  
+for col in num_columns:
+    sns.distplot(x_train[col])
+    plt.title(f'{col} Distribution')
+    plt.show()"""
+
+# BOXPLOT
+"""for col in num_columns:
+    plt.boxplot(x_train[col])
+    plt.title(f'{col} outliers')
+    plt.show()"""
+
+
+#Encoding + scaling
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import StandardScaler
+le = ColumnTransformer(transformers=[('encoder',OneHotEncoder(handle_unknown='ignore'),['State']),('scaling',StandardScaler(),num_columns)],remainder='passthrough')
+x_train = le.fit_transform(x_train)
+x_test = le.transform(x_test)
+
+# feature Selection
+from sklearn.linear_model import LinearRegression
+lr = LinearRegression()
+from mlxtend.feature_selection import SequentialFeatureSelector
+SFS = SequentialFeatureSelector(lr,k_features='best',forward=True,floating=False,scoring='r2',cv=5)
+x_train = SFS.fit_transform(x_train, y_train)
+
+x_test = SFS.transform(x_test)
+
+lreg =LinearRegression()
+lreg.fit(x_train,y_train)
+y_pred = lreg.predict(x_test)
+from sklearn.metrics import r2_score
+
+xlreg =LinearRegression()
+lreg.fit(x_train,y_train)
+y_pred = lreg.predict(x_test)
+from sklearn.metrics import r2_score
+print("Accuracy of model : ",r2_score(y_test,y_pred))
+# Convert selected features to DataFrame
+X_test_df = pd.DataFrame(
+x_test,columns=[f"Feature_{i+1}" for i in range(x_test.shape[1])])
+# Convert predictions to DataFrame
+y_pred_df = pd.DataFrame(y_pred, columns=['Predicted_Profit'])
+# Convert actual values to DataFrame
+y_test_df = pd.DataFrame(y_test.values, columns=['Actual_Profit'])
+# Combine everything
+results = pd.concat([X_test_df, y_test_df, y_pred_df], axis=1)
+print(results.head())
